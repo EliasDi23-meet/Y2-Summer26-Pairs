@@ -1,11 +1,9 @@
-import './TypingDots.css';
-
 export default function TypingDots() {
   return (
-    <span className="typing-dots" aria-label="Agent is typing">
-      <span style={{ animationDelay: '0ms' }} />
-      <span style={{ animationDelay: '160ms' }} />
-      <span style={{ animationDelay: '320ms' }} />
-    </span>
-  );
+    <div className="flex items-center gap-1.5 px-1 py-1">
+      <span className="h-2 w-2 rounded-full bg-pitch-400 animate-bounce-dot" />
+      <span className="h-2 w-2 rounded-full bg-pitch-400 animate-bounce-dot" style={{ animationDelay: '0.2s' }} />
+      <span className="h-2 w-2 rounded-full bg-pitch-400 animate-bounce-dot" style={{ animationDelay: '0.4s' }} />
+    </div>
+  )
 }

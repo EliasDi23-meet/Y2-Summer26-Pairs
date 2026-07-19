@@ -1,269 +1,193 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AGENTS, AGENT_LIST, AgentId } from '../agents';
-import { ChatMessage, sendChat } from '../lib/chat';
-import MessageBubble from '../components/MessageBubble';
-import TypingDots from '../components/TypingDots';
-import './ChatPage.css';
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { AGENTS, AGENT_LIST, type AgentId, type AgentMeta } from '../lib/agents'
+import { sendChat, type ChatMessage } from '../lib/chat'
+import AgentAvatar from '../components/AgentAvatar'
+import MessageBubble from '../components/MessageBubble'
+import TypingDots from '../components/TypingDots'
+
+function getAgent(id?: string): AgentMeta | undefined {
+  if (!id) return undefined
+  return AGENTS[id as AgentId]
+}
 
 export default function ChatPage() {
-  const { agentId } = useParams<{ agentId: string }>();
-  const navigate = useNavigate();
-  const agent = AGENTS[agentId as AgentId];
+  const { agentId } = useParams()
+  const agent = useMemo(() => getAgent(agentId), [agentId])
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [retryPayload, setRetryPayload] = useState<ChatMessage[] | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Reset state when switching agents
   useEffect(() => {
-    setMessages([]);
-    setInput('');
-    setLoading(false);
-    setError(null);
-    setRetryPayload(null);
-    // focus the input shortly after mount
-    const t = setTimeout(() => inputRef.current?.focus(), 50);
-    return () => clearTimeout(t);
-  }, [agentId]);
+    setMessages([])
+    setInput('')
+    setLoading(false)
+    setError(null)
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }, [agentId])
 
-  // Auto-scroll to bottom on new content
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, loading, error]);
-
-  const otherAgent = useMemo(() => {
-    if (!agent) return null;
-    return AGENT_LIST.find((a) => a.id !== agent.id) ?? null;
-  }, [agent]);
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [messages, loading])
 
   if (!agent) {
     return (
-      <div className="chat-missing">
-        <h2>Agent not found</h2>
-        <p>That agent doesn't exist. Pick one from the home page.</p>
-        <Link to="/" className="btn btn--primary">
-          Back home
-        </Link>
+      <div className="mx-auto max-w-3xl px-6 py-20 text-center">
+        <h1 className="text-2xl font-semibold text-white">Agent not found</h1>
+        <Link to="/" className="btn-primary mt-6">Back home</Link>
       </div>
-    );
+    )
   }
 
-  const handleSend = async (textArg?: string) => {
-    const text = (textArg ?? input).trim();
-    if (!text || loading) return;
+  const other = AGENT_LIST.find((a) => a.id !== agent.id)!
 
-    const userMsg: ChatMessage = { role: 'user', content: text };
-    const nextMessages = [...messages, userMsg];
-    setMessages(nextMessages);
-    setInput('');
-    setError(null);
-    setRetryPayload(null);
-    setLoading(true);
-
+  async function send(text: string) {
+    const trimmed = text.trim()
+    if (!trimmed || loading) return
+    setError(null)
+    const next: ChatMessage[] = [...messages, { role: 'user', content: trimmed }]
+    setMessages(next)
+    setInput('')
+    setLoading(true)
     try {
-      const { reply } = await sendChat(agent.id, nextMessages);
-      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-    } catch (e) {
-      const msg =
-        e instanceof Error ? e.message : 'Something went wrong while contacting the AI.';
-      setError(msg);
-      setRetryPayload(nextMessages);
+      const reply = await sendChat(agent!.systemPrompt, next)
+      setMessages((m) => [...m, { role: 'assistant', content: reply }])
+    } catch {
+      setError('Something went wrong while connecting to the AI. Please try again.')
     } finally {
-      setLoading(false);
+      setLoading(false)
+      setTimeout(() => inputRef.current?.focus(), 50)
     }
-  };
+  }
 
-  const handleRetry = () => {
-    if (!retryPayload) return;
-    // Drop the failed user message and resend
-    setMessages(retryPayload);
-    setError(null);
-    setRetryPayload(null);
-    setLoading(true);
-    sendChat(agent.id, retryPayload)
-      .then(({ reply }) => {
-        setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-      })
-      .catch((e) => {
-        const msg =
-          e instanceof Error ? e.message : 'Something went wrong while contacting the AI.';
-        setError(msg);
-      })
-      .finally(() => setLoading(false));
-  };
-
-  const handleNewChat = () => {
-    if (loading) return;
-    if (messages.length > 0) {
-      const ok = window.confirm('Start a new conversation? This will clear the current chat.');
-      if (!ok) return;
-    }
-    setMessages([]);
-    setError(null);
-    setRetryPayload(null);
-    setInput('');
-    setTimeout(() => inputRef.current?.focus(), 50);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+      e.preventDefault()
+      send(input)
     }
-  };
+  }
 
-  const showWelcome = messages.length === 0 && !loading && !error;
+  function newChat() {
+    setMessages([])
+    setError(null)
+    setInput('')
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
 
   return (
-    <div
-      className="chat"
-      style={{ '--agent-accent': agent.accent, '--agent-soft': agent.accentSoft } as React.CSSProperties}
-    >
-      <div className="chat__header">
-        <div className="chat__header-left">
-          <div className="chat__avatar" style={{ background: agent.gradient }} aria-hidden>
-            {agent.avatarInitials}
-          </div>
-          <div className="chat__header-meta">
-            <div className="chat__header-name">
-              {agent.name}
-              <span className="chat__header-emoji" aria-hidden>{agent.emoji}</span>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 pt-4">
+        <div className="card flex items-center gap-4 p-4">
+          <AgentAvatar
+            emoji={agent.emoji}
+            size="md"
+            ring={agent.accent === 'pitch' ? 'ring-pitch-500/40' : 'ring-accent-500/40'}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-xl tracking-wide text-white truncate">{agent.name}</h1>
+              <span className="rounded-full bg-night-800 px-2.5 py-0.5 text-xs text-night-200">{agent.role}</span>
             </div>
-            <div className="chat__header-role">{agent.role}</div>
+            <p className="text-xs text-night-400 truncate">{agent.tagline}</p>
           </div>
-        </div>
-        <div className="chat__header-actions">
-          {otherAgent && (
-            <button
-              type="button"
-              className="chat__switch"
-              onClick={() => navigate(`/chat/${otherAgent.id}`)}
-              title={`Switch to ${otherAgent.name}`}
-            >
-              <span className="chat__switch-icon" aria-hidden>⇄</span>
-              <span className="chat__switch-text">Switch to {otherAgent.name}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="chat__new"
-            onClick={handleNewChat}
-            disabled={loading || messages.length === 0}
-            title="Start a new conversation"
-          >
-            <span aria-hidden>＋</span>
-            <span className="chat__new-text">New chat</span>
+          <button onClick={newChat} className="btn-ghost hidden sm:inline-flex">
+            New Chat
           </button>
+          <Link to={`/agent/${other.id}`} className="btn-ghost">
+            Switch Agent
+          </Link>
         </div>
       </div>
 
-      <div className="chat__scroll" ref={scrollRef}>
-        {showWelcome ? (
-          <div className="chat__welcome">
-            <div className="chat__welcome-avatar" style={{ background: agent.gradient }} aria-hidden>
-              {agent.avatarInitials}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto mx-auto w-full max-w-3xl px-4 sm:px-6 py-6 space-y-4">
+        {messages.length === 0 && !loading && (
+          <div className="animate-fade-in">
+            <div className="flex flex-col items-center text-center py-8">
+              <AgentAvatar emoji={agent.emoji} size="lg" ring={agent.accent === 'pitch' ? 'ring-pitch-500/40' : 'ring-accent-500/40'} />
+              <h2 className="mt-4 font-display text-2xl tracking-wide text-white">Welcome to {agent.name}</h2>
+              <p className="mt-2 max-w-md text-sm text-night-300">{agent.welcome}</p>
             </div>
-            <h2 className="chat__welcome-title">{agent.name}</h2>
-            <p className="chat__welcome-role">{agent.role}</p>
-            <p className="chat__welcome-desc">{agent.longDescription}</p>
-            <p className="chat__welcome-message">{agent.welcomeMessage}</p>
-            <div className="chat__suggestions">
-              {agent.suggestedPrompts.map((p) => (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {agent.suggestions.map((s) => (
                 <button
-                  key={p}
-                  type="button"
-                  className="chat__suggestion"
-                  onClick={() => handleSend(p)}
-                  disabled={loading}
+                  key={s}
+                  onClick={() => send(s)}
+                  className="card p-4 text-left text-sm text-night-200 hover:border-pitch-500/40 hover:bg-night-800/80 transition"
                 >
-                  {p}
+                  {s}
                 </button>
               ))}
             </div>
           </div>
-        ) : (
-          <div className="chat__messages">
-            {messages.map((m, i) => (
-              <MessageBubble key={i} role={m.role} content={m.content} agent={agent} />
-            ))}
+        )}
 
-            {loading && (
-              <div className="bubble bubble--assistant">
-                <div className="bubble__avatar" style={{ background: agent.gradient }} aria-hidden>
-                  {agent.avatarInitials}
-                </div>
-                <div className="bubble__content">
-                  <div className="bubble__name">{agent.name}</div>
-                  <div className="chat__thinking">
-                    <span className="chat__thinking-label">
-                      {agent.name} is thinking
-                    </span>
-                    <TypingDots />
-                  </div>
-                </div>
-              </div>
-            )}
+        {messages.map((m, i) => (
+          <MessageBubble key={i} role={m.role} content={m.content} emoji={agent.emoji} />
+        ))}
 
-            {error && (
-              <div className="chat__error" role="alert">
-                <div className="chat__error-icon" aria-hidden>!</div>
-                <div className="chat__error-body">
-                  <p className="chat__error-title">Something went wrong while connecting to the AI.</p>
-                  <p className="chat__error-detail">{error}</p>
-                  <button type="button" className="chat__error-retry" onClick={handleRetry}>
-                    Try again
-                  </button>
-                </div>
+        {loading && (
+          <div className="flex items-center gap-3">
+            <AgentAvatar emoji={agent.emoji} size="sm" />
+            <div className="card px-4 py-3">
+              <div className="flex items-center gap-3">
+                <TypingDots />
+                <span className="text-xs text-night-400">{agent.name} is thinking...</span>
               </div>
-            )}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="card border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+            <p>{error}</p>
+            <button
+              onClick={() => {
+                const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+                if (lastUser) send(lastUser.content)
+              }}
+              className="btn-ghost mt-3"
+            >
+              Try Again
+            </button>
           </div>
         )}
       </div>
 
-      <div className="chat__input-bar">
-        <div className="chat__input-wrap">
-          <textarea
-            ref={inputRef}
-            className="chat__input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={agent.placeholder}
-            rows={1}
-            disabled={loading}
-            aria-label="Message"
-          />
-          <button
-            type="button"
-            className="chat__send"
-            onClick={() => handleSend()}
-            disabled={loading || input.trim().length === 0}
-            aria-label="Send message"
-          >
-            {loading ? (
-              <span className="chat__send-spinner" aria-hidden />
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path
-                  d="M3.4 20.4 21 12 3.4 3.6 3 10l12 2-12 2 .4 6.4Z"
-                  fill="currentColor"
-                />
-              </svg>
-            )}
-          </button>
+      <div className="sticky bottom-0 bg-gradient-to-t from-night-950 to-transparent pt-4">
+        <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 pb-4">
+          <div className="card flex items-end gap-2 p-2">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value)
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
+              }}
+              onKeyDown={onKeyDown}
+              placeholder={agent.placeholder}
+              className="flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-white placeholder:text-night-500 focus:outline-none max-h-40"
+            />
+            <button
+              onClick={() => send(input)}
+              disabled={!input.trim() || loading}
+              className="btn-primary !rounded-xl"
+              aria-label="Send message"
+            >
+              Send
+            </button>
+          </div>
+          <p className="mt-2 text-center text-[11px] text-night-500">
+            Enter to send · Shift + Enter for a new line
+          </p>
         </div>
-        <p className="chat__input-hint">
-          Press <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
-        </p>
       </div>
     </div>
-  );
+  )
 }
