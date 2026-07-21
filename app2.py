@@ -1,3 +1,16 @@
+import os
+from anthropic import Anthropic
+from dotenv import load_dotenv
+from reportlab.pdfgen import canvas
+from main import update_shared_profile
+from main import save_response_as_pdf
+from main import start_convo
+
+load_dotenv()
+
+client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
+
 def run_chat2(shared_context, global_history):
     print('\nYou: (type exit to quit to the main menu, or "save response" to save the last reply)')
     start_convo()
