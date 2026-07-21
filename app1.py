@@ -1,3 +1,16 @@
+from main import update_shared_profile
+from main import save_response_as_pdf
+import os
+from anthropic import Anthropic
+from dotenv import load_dotenv
+from reportlab.pdfgen import canvas
+
+load_dotenv()
+
+client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
+
+
 def run_chat1(shared_context, global_history):
     print('\nYou: (type exit to quit to the main menu, or "save response" to save the last reply)')
     reply = "No conversation took place."
