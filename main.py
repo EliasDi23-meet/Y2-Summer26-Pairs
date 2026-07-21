@@ -27,13 +27,58 @@ def save_response_as_pdf(response_text, filename="naknik_response.pdf"):
             y_position = 800
 
     pdf.save()
-    print(f"PDF saved as {filename}")
+    print(f"\n[System: PDF successfully saved as {filename}]\n")
 
 
-def run_chat1():
-    print('You: (type exit to quit)')
-    system_message = """
+def update_shared_profile(shared_context, global_history):
+    """Background helper that reads the cumulative global history to extract facts."""
+    if not global_history:
+        return
+    
+    try:
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=400,
+            temperature=0,
+            system="You are a data extraction assistant. Look at the conversation history and list out key facts about the user (e.g., trips, locations like France, position, age, injuries). Keep it as a concise, bulleted list. Do not include chat fluff.",
+            messages=global_history
+        )
+        shared_context["user_profile"] = response.content[0].text
+    except Exception:
+        pass
+
+
+def run_chat1(shared_context, global_history):
+    print('\nYou: (type exit to quit to the main menu, or "save response" to save the last reply)')
+    reply = "No conversation took place."
+
+    while True:
+        user_input = input('>> ')
+
+        if user_input.lower() == 'exit':
+            update_shared_profile(shared_context, global_history)
+            break
+
+        if user_input.lower() == 'save response':
+            if reply != "No conversation took place.":
+                # Prompt the user for a custom name
+                custom_name = input("Enter filename (or press Enter for 'naknik_response.pdf'): ").strip()
+                if not custom_name:
+                    custom_name = "naknik_response.pdf"
+                elif not custom_name.lower().endswith(".pdf"):
+                    custom_name += ".pdf"
+                
+                save_response_as_pdf(reply, filename=custom_name)
+            else:
+                print("[System: No response has been generated yet to save!]")
+            continue
+
+        system_message = f"""
 You are Naknik, an experienced football coach whose only purpose is to help users with football coaching.
+
+                     ------------------------CRITICAL KNOWLEDGE------------------------
+Here is what you and your partner agent (Naknikya) currently know about the user. Use this context to tailor your advice without asking repetitive questions:
+{shared_context['user_profile']}
 
                              ------------------------WHO YOU ARE ------------------------
 You are an experienced, motivating, and supportive football coach. Your mission is to help players improve their:
@@ -132,37 +177,57 @@ Briefly explain WHY your advice works.
 [Next Step] 
 Give one clear action the user can take next, or ask one follow-up question if more information is needed. 
 """
-    history = []
-    reply = "No conversation took place."
 
-    while True:
-        user_input = input('>> ')
-
-        if user_input.lower() == 'exit':
-            break
-
-        history.append({'role': 'user', 'content': user_input})
+        global_history.append({'role': 'user', 'content': user_input})
         response = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=300,
+            max_tokens=600,
             temperature=1,
             system=system_message,
-            messages=history
+            messages=global_history
         )
 
         reply = response.content[0].text
         print(f'Claude: {reply}')
-        history.append({'role': 'assistant', 'content': reply})
+        global_history.append({'role': 'assistant', 'content': reply})
+        
+        # Update profile immediately using the shared global history
+        update_shared_profile(shared_context, global_history)
         
     return reply
 
 
-def run_chat2():
-    print('You: (type exit to quit)')
+def run_chat2(shared_context, global_history):
+    print('\nYou: (type exit to quit to the main menu, or "save response" to save the last reply)')
     start_convo()
+    reply = "No conversation took place."
+    
+    while True:
+        user_input = input('>> ')
 
-    # OPTIMIZATION: Moved system message outside the while loop to save memory and CPU cycles
-    system_message = """You are Naknikya, an AI Sports Nutritionist specializing exclusively in nutrition for football (soccer) players between the ages of 12 and 19.
+        if user_input.lower() == 'exit':
+            update_shared_profile(shared_context, global_history)
+            break
+
+        if user_input.lower() == 'save response':
+            if reply != "No conversation took place.":
+                # Prompt the user for a custom name
+                custom_name = input("Enter filename (or press Enter for 'naknik_response.pdf'): ").strip()
+                if not custom_name:
+                    custom_name = "naknik_response.pdf"
+                elif not custom_name.lower().endswith(".pdf"):
+                    custom_name += ".pdf"
+                
+                save_response_as_pdf(reply, filename=custom_name)
+            else:
+                print("[System: No response has been generated yet to save!]")
+            continue
+
+        system_message = f"""You are Naknikya, an AI Sports Nutritionist specializing exclusively in nutrition for football (soccer) players between the ages of 12 and 19.
+
+                          ------------------------CRITICAL KNOWLEDGE------------------------
+Here is what you and your partner agent (Naknik) currently know about the user. Use this context to tailor your advice without asking repetitive questions:
+{shared_context['user_profile']}
 
                           ------------------------WHO YOU ARE------------------------
 
@@ -290,75 +355,56 @@ Briefly explain WHY your recommendation helps football performance.
 [Next Step]
 Give one clear action the user can take next, or ask one follow-up question if more information is needed.
 """ 
-    history = []
-    reply = "No conversation took place."
-    
-    while True:
-        user_input = input('>> ')
 
-        if user_input.lower() == 'exit':
-            break
-
-        history.append({'role': 'user', 'content': user_input})
+        global_history.append({'role': 'user', 'content': user_input})
         response = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=300,
+            max_tokens=600,
             temperature=1,
             system=system_message,
-            messages=history
+            messages=global_history
         )
         reply = response.content[0].text
         print(f'Claude: {reply}')
-        history.append({'role': 'assistant', 'content': reply})
+        global_history.append({'role': 'assistant', 'content': reply})
+
+        # Update profile immediately using the shared global history
+        update_shared_profile(shared_context, global_history)
 
     return reply
 
 
-def choose_chat():
+def choose_chat(shared_context, global_history):
     while True:
-        choice = input("Which agent do you want to use? (Naknik/Naknikya): ")
+        choice = input("\nWhich agent do you want to use? (Naknik/Naknikya): ")
         
         if choice.lower() == "naknik":
-            return run_chat1()
+            return run_chat1(shared_context, global_history)
         elif choice.lower() == "naknikya":
-            return run_chat2()
+            return run_chat2(shared_context, global_history)
         else:
             print("Please enter (Naknik/Naknikya)")
 
 
-# =====================================================================
-# TWO NEW FUNCTIONS AT THE END
-# =====================================================================
 
-def your_first_new_function(text):
-    # Add your custom logic here (e.g., text filtering, console logs, statistics)
-    print("--- Running your first new function ---")
-    return text
-
-def your_second_new_function(text):
-    # Add your custom logic here
-    print("--- Running your second new function ---")
-    return text
 
 
 # Execution block
 if __name__ == "__main__":
-    final_reply = choose_chat()
+    shared_memory = {
+        "user_profile": "No profile details established yet."
+    }
+    global_conversation_history = []
     
-    final_reply = your_first_new_function(final_reply)
-    final_reply = your_second_new_function(final_reply)
+    print("--- Welcome to the Football Training Station! ---")
     
-    # ASK THE USER IF THEY WANT TO SAVE
-    save_choice = input("Would you like to save the last response as a PDF? (yes/no): ")
-    if save_choice.lower() in ['yes', 'y']:
-        custom_name = input("Enter filename (or press Enter for default 'naknik_response.pdf'): ")
+    while True:
+        final_reply = choose_chat(shared_memory, global_conversation_history)
         
-        if custom_name.strip():
-            # Make sure it ends with .pdf
-            if not custom_name.endswith('.pdf'):
-                custom_name += '.pdf'
-            save_response_as_pdf(final_reply, filename=custom_name)
-        else:
-            save_response_as_pdf(final_reply)
-    else:
-        print("Chat ended without saving.")
+        
+        print("\n[System: You exited the chat room.]")
+        next_step = input("Type 'switch' to choose another agent, or 'quit' to close the app: ")
+        
+        if next_step.lower() == 'quit':
+            print("Session ended cleanly. Goodbye!")
+            break

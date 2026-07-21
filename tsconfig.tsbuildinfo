@@ -1,1 +1,0 @@
-{"root":["./src/main.tsx","./src/vite-env.d.ts","./src/components/AgentAvatar.tsx","./src/components/Layout.tsx","./src/components/MessageBubble.tsx","./src/components/TypingDots.tsx","./src/lib/agents.ts","./src/lib/chat.ts","./src/pages/ChatPage.tsx","./src/pages/Home.tsx"],"version":"5.9.3"}
