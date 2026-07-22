@@ -208,16 +208,20 @@ Give one clear action the user can take next, or ask one follow-up question if m
 """ 
 
         global_history.append({'role': 'user', 'content': user_input})
-        response = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=600,
-            temperature=1,
-            system=system_message,
-            messages=global_history
-        )
-        reply = response.content[0].text
-        print(f'Claude: {reply}')
-        global_history.append({'role': 'assistant', 'content': reply})
+        try:
+            response = client.messages.create(
+                model='claude-haiku-4-5-20251001',
+                max_tokens=600,
+                temperature=1,
+                system=system_message,
+                messages=global_history
+            )
+            reply = response.content[0].text
+            print(f'Claude: {reply}')
+            global_history.append({'role': 'assistant', 'content': reply})
+        except Exception:
+            print("an error has occured with the API call, try checking the API")
+            break
 
         # Update profile immediately using the shared global history
         update_shared_profile(shared_context, global_history)

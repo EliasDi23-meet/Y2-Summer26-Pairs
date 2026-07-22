@@ -7,7 +7,7 @@ from app2 import run_chat2
 
 load_dotenv()
 
-client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+#client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY1'))
 
 goal = None
 def start_convo():
@@ -64,7 +64,7 @@ def choose_chat(shared_context, global_history):
 
 
 
-
+ 
 # Execution block
 if __name__ == "__main__":
     shared_memory = {
@@ -83,4 +83,4 @@ if __name__ == "__main__":
         
         if next_step.lower() == 'quit':
             print("Session ended cleanly. Goodbye!")
-            break
+            break 
